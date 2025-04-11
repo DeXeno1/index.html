@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice-to-Personality</title>
+    <link href="https://fonts.googleapis.com/css2?family=Vietnam+Pro&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Vietnam Pro', sans-serif;
+            background-color: #f8f4ff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            color: #6b3fa0;
+            font-size: 36px;
+            border: 2px dashed #c9a0ff;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 18px;
+            background-color: #6b3fa0;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #8250c7;
+        }
+
+        button:disabled {
+            background-color: #c4b5fd;
+            cursor: not-allowed;
+        }
+
+        .output {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #333;
+            max-width: 80%;
+            text-align: center;
+            padding: 15px;
+            border: 2px dashed #bbb;
+            background-color: #fff;
+            border-radius: 10px;
+            word-wrap: break-word;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #waveform {
+            width: 90%;
+            max-width: 800px;
+            height: 150px;
+            margin-top: 20px;
+            border: 2px solid #6b3fa0;
+            border-radius: 10px;
+            background-color: #f0f0f0;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        .error-message {
+            color: red;
+            font-size: 16px;
+            margin-top: 10px;
+            text-align: center;
+            padding: 10px;
+            background-color: #ffe0e0;
+            border: 1px solid #ffb3b3;
+            border-radius: 5px;
+            width: 80%;
+            max-width: 600px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h1>Voice-to-Personality</h1>
+        <button id="startButton" onclick="startRecording()">Start Recording</button>
+        <canvas id="waveform"></canvas>
+        <div class="output" id="output"></div>
+        <div id="errorDisplay" class="error-message" style="display:none;"></div>
+    </div>
+    <script>
+        let recorder;
+        let audioContext;
+        let analyser;
+        let microphoneStream;
+        let waveformCanvas;
+        let waveformContext;
+        let recordingTimer;
+        let isRecording = false;
+        let errorDisplay;
+
+        window.onload = function() {
+            errorDisplay = document.getElementById("errorDisplay");
+        }
+
+        // Function to display errors
+        function displayError(message) {
+            errorDisplay.textContent = message;
+            errorDisplay.style.display = "block";
+        }
+
+        // Function to clear errors
+        function clearError() {
+            errorDisplay.style.display = "none";
+            errorDisplay.textContent = "";
+        }
+
+        // Start the voice recording
+        function startRecording() {
+            clearError();
+            const startButton = document.getElementById("startButton");
+            startButton.disabled = true;
+            startButton.innerText = "Recording...";
+            isRecording = true;
+
+            console.log("Attempting to start recording...");
+
+            // Check for microphone presence before attempting to access it.
+            navigator.mediaDevices.enumerateDevices()
+            .then(devices => {
+                console.log("Devices:", devices); // Log the device list
+                const hasMicrophone = devices.some(device => device.kind === 'audioinput');
+
+                if (!hasMicrophone) {
+                    handleMicrophoneError({name: 'NotFoundError'}); // Use our error handler
+                    return; // IMPORTANT: Stop here if no microphone
+                }
+
+                // Delay the getUserMedia call
+                setTimeout(() => {
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then((stream) => {
+                            console.log("Microphone access granted.");
+                            microphoneStream = stream;
+                            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            analyser = audioContext.createAnalyser();
+                            analyser.fftSize = 2048;
+                            analyser.smoothingTimeConstant = 0.3;
+
+                            const microphone = audioContext.createMediaStreamSource(stream);
+                            microphone.connect(analyser);
+
+                            recorder = new MediaRecorder(stream);
+                            recorder.start();
+                            console.log("Recording started...");
+
+                            waveformCanvas = document.getElementById("waveform");
+                            waveformContext = waveformCanvas.getContext("2d");
+                            waveformCanvas.width = waveformCanvas.offsetWidth;
+                            waveformCanvas.height = waveformCanvas.offsetHeight;
+
+                            drawWaveform();
+
+                            recordingTimer = setTimeout(stopRecording, 6000);
+                        })
+                        .catch((error) => {
+                            console.error("getUserMedia error:", error); // Log the error object
+                            handleMicrophoneError(error); // Use the new handler
+                        });
+                    }, 250); // Short delay, adjust as necessary
+                })
+                .catch(err => {
+                    console.error("enumerateDevices error:", err);
+                    handleMicrophoneError(err);
+                });
+        }
+
+        // Stop the recording
+        function stopRecording() {
+            console.log("Stopping recording...");
+            isRecording = false;
+
+            if (recorder && recorder.state !== "inactive") {
+                recorder.stop();
+                if (microphoneStream) {
+                    microphoneStream.getTracks().forEach(track => track.stop());
+                }
+                enableStartButton();
+                analyzeFrequency();
+            }
+            clearTimeout(recordingTimer);
+        }
+
+        function enableStartButton() {
+            const startButton = document.getElementById("startButton");
+            startButton.disabled = false;
+            startButton.innerText = "Start Recording";
+        }
+
+        function drawWaveform() {
+            if (!analyser || !isRecording) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            waveformContext.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+            waveformContext.beginPath();
+            waveformContext.lineWidth = 2;
+            waveformContext.strokeStyle = '#6b3fa0';
+
+            const sliceWidth = waveformCanvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * waveformCanvas.height / 2;
+
+                if (i === 0) {
+                    waveformContext.moveTo(x, y);
+                } else {
+                    waveformContext.lineTo(x, y);
+                }
+                x += sliceWidth;
+            }
+            waveformContext.lineTo(waveformCanvas.width, waveformCanvas.height / 2);
+            waveformContext.stroke();
+
+            if (isRecording) {
+                requestAnimationFrame(drawWaveform);
+            }
+        }
+
+        function analyzeFrequency() {
+            if (!analyser) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            let maxFrequency = 0;
+            let maxIndex = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                if (dataArray[i] > maxFrequency) {
+                    maxFrequency = dataArray[i];
+                    maxIndex = i;
+                }
+            }
+
+            const nyquist = audioContext.sampleRate / 2;
+            const hz = maxIndex * nyquist / bufferLength;
+
+            const output = document.getElementById("output");
+            output.innerText = `Your frequency is ${hz.toFixed(2)} Hz!`;
+
+            if (hz < 80) {
+                output.innerText += "\nYou have a very low frequency voice, often associated with calmness, groundedness, and a relaxed demeanor. You likely possess a deep sense of inner peace and tranquility.";
+            } else if (hz >= 80 && hz < 150) {
+                output.innerText += "\nYou have a low to moderate frequency voice, suggesting a thoughtful, patient, and reliable personality.  You come across as steady and dependable.";
+            } else if (hz >= 150 && hz < 250) {
+                output.innerText += "\nYou have a moderate frequency voice, indicating a balanced and expressive nature. You are likely adaptable, sociable, and possess good communication skills.";
+            } else if (hz >= 250 && hz < 500) {
+                output.innerText += "\nYou have a medium-high frequency voice, suggesting energy, enthusiasm, and a vibrant personality. You are likely outgoing, dynamic, and enjoy being around people.";
+            } else if (hz >= 500 && hz < 1000) {
+                output.innerText += "\nYou have a high frequency voice, often associated with confidence, excitement, and a strong presence.  You are perceived as assertive, passionate, and perhaps even intense.";
+            } else {
+                output.innerText += "\nYou have a very high frequency voice, indicating a highly energetic, possibly intense, and commanding personality. You are likely seen as bold, dynamic, and leave a strong impression.";
+            }
+        }
+
+        function handleMicrophoneError(error) {
+            console.error("Error accessing microphone:", error);
+            let errorMessage = "An unknown error occurred while accessing the microphone.";
+
+            if (error.name === 'NotAllowedError') {
+                errorMessage = "Permission to access the microphone was denied. Please allow microphone access in your browser settings.";
+            } else if (error.name === 'NotFoundError') {
+                errorMessage = "No microphone was found. Please make sure a microphone is connected and enabled.";
+            } else if (error.name === 'SecurityError') {
+                errorMessage = "Microphone access is blocked, possibly due to an insecure connection (HTTPS).";
+            } else if (error.name === 'AbortError') {
+                errorMessage = "Microphone access was aborted.";
+            } else if (error.name === 'InvalidStateError') {
+                errorMessage = "The microphone is in an invalid state.";
+            }  else if (error.name === 'NotReadableError') {
+                errorMessage = "The microphone is in use by another application.";
+            } else {
+                errorMessage = `An error occurred: ${error.name}. Please check your microphone and browser settings.  Error Details: ${error.message}`; // Include error message
+            }
+
+            displayError(errorMessage);
+            enableStartButton();
+        }
+    </script>
+</body>
+</html>
