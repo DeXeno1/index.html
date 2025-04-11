@@ -269,14 +269,18 @@
             output.innerText = `Your frequency is ${hz.toFixed(2)} Hz!`;
 
             if (hz < 45) {
-                output.innerText += "\nYou have such a unique voice, as if your mic hasn't captured enough audio";
+                output.innerText += "\nYou have such a unique voice, as if your mic hasn't captured enough audio.";
             } else if (hz >= 45 && hz < 80) {
                 output.innerText += "\nYou have a very low frequency voice, often associated with calmness, groundedness, and a relaxed demeanor. You likely possess a deep sense of inner peace and tranquility.";
             } else if (hz >= 80 && hz < 150) {
                 output.innerText += "\nYou have a low to moderate frequency voice, suggesting a thoughtful, patient, and reliable personality.  You come across as steady and dependable.";
-            } else if (hz >= 150 && hz < 250) {
+                } else if (hz >= 150 && hz < 200) {
+                output.innerText += "\nYou're voice is at the moderate level. You're likely to be sociable, entertatining, and you most likely love your pets.";
+            } else if (hz >= 200 && hz < 250) {
                 output.innerText += "\nYou have a moderate frequency voice, indicating a balanced and expressive nature. You are likely adaptable, sociable, and possess good communication skills.";
-            } else if (hz >= 250 && hz < 500) {
+                } else if (hz >= 250 && hz < 350) {
+                output.innerText += "\nYou have a slightly-high frequency voice, designating a spirited and expressive nature. You are highly lively, sociable, and dominate in superior communication skills.";
+            } else if (hz >= 350 && hz < 500) {
                 output.innerText += "\nYou have a medium-high frequency voice, suggesting energy, enthusiasm, and a vibrant personality. You are likely outgoing, dynamic, and enjoy being around people.";
             } else if (hz >= 500 && hz < 1000) {
                 output.innerText += "\nYou have a high frequency voice, often associated with confidence, excitement, and a strong presence.  You are perceived as assertive, passionate, and perhaps even intense.";
